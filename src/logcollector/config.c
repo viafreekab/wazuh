@@ -20,6 +20,7 @@ int LogCollectorConfig(const char *cfgfile)
     modules |= CLOCALFILE;
 
     log_config.config = NULL;
+    log_config.globs = NULL;
     log_config.agent_cfg = 0;
     log_config.accept_remote = getDefine_Int("logcollector", "remote_commands", 0, 1);
 
@@ -28,6 +29,7 @@ int LogCollectorConfig(const char *cfgfile)
     open_file_attempts = getDefine_Int("logcollector", "open_attempts", 2, 998);
     vcheck_files = getDefine_Int("logcollector", "vcheck_files", 0, 1024);
     maximum_lines = getDefine_Int("logcollector", "max_lines", 100, 100000);
+    maximum_files = getDefine_Int("logcollector", "max_files", 0, 100000);
 
     if (ReadConfig(modules, cfgfile, &log_config, NULL) < 0) {
         return (OS_INVALID);
@@ -41,6 +43,6 @@ int LogCollectorConfig(const char *cfgfile)
 #endif
 
     logff = log_config.config;
-
+    globs = log_config.globs;
     return (1);
 }

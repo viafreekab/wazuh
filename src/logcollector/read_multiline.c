@@ -12,7 +12,7 @@
 
 
 /* Read multiline logs */
-void *read_multiline(int pos, int *rc, int drop_it)
+void *read_multiline(logreader *lf, int *rc, int drop_it)
 {
     int __ms = 0;
     int linecount;
@@ -29,12 +29,12 @@ void *read_multiline(int pos, int *rc, int drop_it)
     str[OS_MAXSTR] = '\0';
     *rc = 0;
 
-    linecount = atoi(logff[pos].logformat);
+    linecount = atoi(lf->logformat);
 
     /* Get initial file location */
-    fgetpos(logff[pos].fp, &fp_pos);
+    fgetpos(lf->fp, &fp_pos);
 
-    while (fgets(str, OS_MAXSTR - OS_LOG_HEADER, logff[pos].fp) != NULL && lines < maximum_lines) {
+    while (fgets(str, OS_MAXSTR - OS_LOG_HEADER, lf->fp) != NULL && lines < maximum_lines) {
 
         lines++;
         linesgot++;
@@ -53,7 +53,7 @@ void *read_multiline(int pos, int *rc, int drop_it)
         } else {
             /* Message not complete. Return. */
             mdebug1("Message not complete. Trying again: '%s'", str);
-            fsetpos(logff[pos].fp, &fp_pos);
+            fsetpos(lf->fp, &fp_pos);
             break;
         }
 
@@ -80,7 +80,7 @@ void *read_multiline(int pos, int *rc, int drop_it)
 
         /* Send message to queue */
         if (drop_it == 0) {
-            if (SendMSG(logr_queue, buffer, logff[pos].file,
+            if (SendMSG(logr_queue, buffer, lf->file,
                         LOCALFILE_MQ) < 0) {
                 merror(QUEUE_SEND);
                 if ((logr_queue = StartMQ(DEFAULTQPATH, WRITE)) < 0) {
@@ -95,7 +95,7 @@ void *read_multiline(int pos, int *rc, int drop_it)
         /* Incorrect message size */
         if (__ms) {
             merror("Large message size: '%s'", str);
-            while (fgets(str, OS_MAXSTR - 2, logff[pos].fp) != NULL) {
+            while (fgets(str, OS_MAXSTR - 2, lf->fp) != NULL) {
                 /* Get the last occurrence of \n */
                 if ((p = strrchr(str, '\n')) != NULL) {
                     break;
@@ -104,10 +104,10 @@ void *read_multiline(int pos, int *rc, int drop_it)
             __ms = 0;
         }
 
-        fgetpos(logff[pos].fp, &fp_pos);
+        fgetpos(lf->fp, &fp_pos);
         continue;
     }
 
-    mdebug2("Read %d lines from %s", lines, logff[pos].file);
+    mdebug2("Read %d lines from %s", lines, lf->file);
     return (NULL);
 }

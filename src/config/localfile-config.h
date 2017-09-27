@@ -43,18 +43,27 @@ typedef struct _logreader {
     char *query;
     wlabel_t *labels;
 
-    void *(*read)(int i, int *rc, int drop_it);
+    void *(*read)(struct _logreader *lf, int *rc, int drop_it);
 
     FILE *fp;
 } logreader;
 
+typedef struct _logreader_glob {
+    char *gpath;
+    logreader *gfiles;
+} logreader_glob;
+
 typedef struct _logreader_config {
     int agent_cfg;
     int accept_remote;
+    logreader_glob *globs;
     logreader *config;
 } logreader_config;
 
 /* Frees the Localfile struct  */
 void Free_Localfile(logreader_config * config);
+
+/* Removes a specific localfile */
+int Remove_Localfile(logreader **logf, int i);
 
 #endif /* __CLOGREADER_H */

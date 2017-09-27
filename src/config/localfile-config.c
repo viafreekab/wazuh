@@ -11,14 +11,16 @@
 #include "localfile-config.h"
 #include "config.h"
 
+int maximum_files;
+int current_files;
 
 int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
 {
     unsigned int pl = 0;
+    unsigned int gl = 0;
     unsigned int i = 0;
-    unsigned int glob_set = 0;
 #ifndef WIN32
-    int glob_offset = 0;
+    int glob_offset;
 #endif
 
     /* XML Definitions */
@@ -36,6 +38,11 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
     size_t labels_z=0;
 
     log_config = (logreader_config *)d1;
+
+    if (current_files >= maximum_files) {
+        mwarn(FILE_LIMIT);
+        return 0;
+    }
 
     /* If config is not set, create it */
     if (!log_config->config) {
@@ -69,6 +76,16 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
         logf[pl + 1].future = 0;
         logf[pl + 1].query = NULL;
     }
+
+    if (!log_config->globs) {
+        os_calloc(1, sizeof(logreader_glob), log_config->globs);
+    } else {
+        while (log_config->globs[gl].gpath) {
+             gl++;
+         }
+    }
+    log_config->globs[gl].gpath = NULL;
+    log_config->globs[gl].gfiles = NULL;
 
     logf[pl].file = NULL;
     logf[pl].command = NULL;
@@ -155,133 +172,25 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
                 logf[pl].ign = atoi(node[i]->content);
             }
         } else if (strcmp(node[i]->element, xml_localfile_location) == 0) {
-        #ifdef WIN32
-            /* Expand variables on Windows */
-            if (strchr(node[i]->content, '%')) {
-                int expandreturn = 0;
-                char newfile[OS_MAXSTR + 1];
+#ifdef WIN32
+                /* Expand variables on Windows */
+                if (strchr(node[i]->content, '%')) {
+                    int expandreturn = 0;
+                    char newfile[OS_MAXSTR + 1];
 
-                newfile[OS_MAXSTR] = '\0';
-                expandreturn = ExpandEnvironmentStrings(node[i]->content,
-                                                        newfile, OS_MAXSTR);
+                    newfile[OS_MAXSTR] = '\0';
+                    expandreturn = ExpandEnvironmentStrings(node[i]->content,
+                                                            newfile, OS_MAXSTR);
 
-                if ((expandreturn > 0) && (expandreturn < OS_MAXSTR)) {
-                    free(node[i]->content);
+                    if ((expandreturn > 0) && (expandreturn < OS_MAXSTR)) {
+                        free(node[i]->content);
 
-                    os_strdup(newfile, node[i]->content);
-                }
-            }
-        #endif
-
-            /* This is a glob*
-             * We will call this file multiple times until
-             * there is no one else available.
-             */
-#ifndef WIN32 /* No windows support for glob */
-            if (strchr(node[i]->content, '*') ||
-                    strchr(node[i]->content, '?') ||
-                    strchr(node[i]->content, '[')) {
-                glob_t g;
-
-                /* Setting to the first entry of the glob */
-                if (glob_set == 0) {
-                    glob_set = pl + 1;
-                }
-
-                if (glob(node[i]->content, 0, NULL, &g) != 0) {
-                    merror(GLOB_ERROR, node[i]->content);
-                    os_strdup(node[i]->content, logf[pl].file);
-                    i++;
-                    continue;
-                }
-
-                /* Check for the last entry */
-                if ((g.gl_pathv[glob_offset]) == NULL) {
-                    /* Check when nothing is found */
-                    if (glob_offset == 0) {
-                        merror(GLOB_NFOUND, node[i]->content);
-                        return (OS_INVALID);
+                        os_strdup(newfile, node[i]->content);
                     }
-                    i++;
-                    continue;
                 }
-
-
-                while(g.gl_pathv[glob_offset] != NULL)
-                {
-                    /* Check for strftime on globs too */
-                    if (strchr(g.gl_pathv[glob_offset], '%')) {
-                        struct tm *p;
-                        time_t l_time = time(0);
-                        char lfile[OS_FLSIZE + 1];
-                        size_t ret;
-
-                        p = localtime(&l_time);
-
-                        lfile[OS_FLSIZE] = '\0';
-                        ret = strftime(lfile, OS_FLSIZE, g.gl_pathv[glob_offset], p);
-                        if (ret == 0) {
-                            merror(PARSE_ERROR, g.gl_pathv[glob_offset]);
-                            return (OS_INVALID);
-                        }
-
-                        os_strdup(g.gl_pathv[glob_offset], logf[pl].ffile);
-                        os_strdup(g.gl_pathv[glob_offset], logf[pl].file);
-                    } else {
-                        os_strdup(g.gl_pathv[glob_offset], logf[pl].file);
-                    }
-
-                    glob_offset++;
-
-                    /* Now we need to create another file entry */
-                    pl++;
-                    os_realloc(logf, (pl +2)*sizeof(logreader), log_config->config);
-                    logf = log_config->config;
-
-                    logf[pl].file = NULL;
-                    logf[pl].alias = NULL;
-                    logf[pl].logformat = NULL;
-                    logf[pl].fp = NULL;
-                    logf[pl].ffile = NULL;
-
-                    logf[pl +1].file = NULL;
-                    logf[pl +1].alias = NULL;
-                    logf[pl +1].logformat = NULL;
-                }
-
-
-                globfree(&g);
-            } else if (strchr(node[i]->content, '%'))
-            #else
-            if (strchr(node[i]->content, '%'))
-            #endif /* WIN32 */
-
-            /* We need the format file (based on date) */
-            {
-                struct tm *p;
-                time_t l_time = time(0);
-                char lfile[OS_FLSIZE + 1];
-                size_t ret;
-
-                p = localtime(&l_time);
-
-                lfile[OS_FLSIZE] = '\0';
-                ret = strftime(lfile, OS_FLSIZE, node[i]->content, p);
-                if (ret != 0) {
-                    os_strdup(node[i]->content, logf[pl].ffile);
-                }
-
+#endif
                 os_strdup(node[i]->content, logf[pl].file);
-            }
-
-            /* Normal file */
-            else {
-                os_strdup(node[i]->content, logf[pl].file);
-            }
-        }
-
-        /* Get log format */
-        else if (strcasecmp(node[i]->element, xml_localfile_logformat) == 0) {
+        } else if (strcasecmp(node[i]->element, xml_localfile_logformat) == 0) {
             os_strdup(node[i]->content, logf[pl].logformat);
 
             if (strcmp(logf[pl].logformat, "syslog") == 0) {
@@ -348,38 +257,129 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
         i++;
     }
 
-    /* Validate glob entries */
-    if (glob_set) {
-        char *format;
+    current_files++;
 
-        /* Get log format */
-        if (logf[pl].logformat) {
-            format = logf[pl].logformat;
-        } else if (logf[glob_set - 1].logformat) {
-            format = logf[glob_set - 1].logformat;
-        } else {
-            merror(MISS_LOG_FORMAT);
-            return (OS_INVALID);
-        }
+    if (!logf[pl].command) {
+        /* Validate glob entries */
+#ifndef WIN32
+        if (strchr(logf[pl].file, '*') ||
+            strchr(logf[pl].file, '?') ||
+            strchr(logf[pl].file, '[')) {
+            glob_t g;
+            int err;
+            size_t n_files = 0;
+            glob_offset = 0;
 
-        /* The last entry is always null on glob */
-        pl--;
+            if (err = glob(logf[pl].file, 0, NULL, &g), err && err != GLOB_NOMATCH) {
+                merror(GLOB_ERROR, logf[pl].file);
+            } else {
+                current_files--;
+                os_realloc(log_config->globs, (gl + 2)*sizeof(logreader_glob), log_config->globs);
+                os_strdup(logf[pl].file, log_config->globs[gl].gpath);
+                log_config->globs[gl + 1].gpath = NULL;
+                log_config->globs[gl + 1].gfiles = NULL;
 
-        /* Set format for all entries */
-        for (i = (glob_set - 1); i <= pl; i++) {
-            /* Every entry must be valid */
-            if (!logf[i].file) {
-                merror(MISS_FILE);
+                /* Check for the last entry */
+                if (err == GLOB_NOMATCH) {
+                    /* Check when nothing is found */
+                    mwarn(GLOB_NFOUND, logf[pl].file);
+
+                    os_calloc(1, sizeof(logreader), log_config->globs[gl].gfiles);
+                    log_config->globs[gl].gfiles->file = NULL;
+                    log_config->globs[gl].gfiles->ffile = NULL;
+                    log_config->globs[gl].gfiles->logformat = logf[pl].logformat;
+                    log_config->globs[gl].gfiles->djb_program_name = logf[pl].djb_program_name;
+                    log_config->globs[gl].gfiles->command = logf[pl].command;
+                    log_config->globs[gl].gfiles->alias = logf[pl].alias;
+                    log_config->globs[gl].gfiles->future = logf[pl].future;
+                    log_config->globs[gl].gfiles->query = logf[pl].query;
+                    log_config->globs[gl].gfiles->labels = logf[pl].labels;
+                    log_config->globs[gl].gfiles->read = NULL;
+                    log_config->globs[gl].gfiles->fp = NULL;
+                } else {
+                    if (log_config->globs[gl].gfiles) {
+                        while (log_config->globs[gl].gfiles[n_files].file != NULL) {
+                            n_files++;
+                        }
+                    } else {
+                        n_files = 0;
+                    }
+
+                    while (g.gl_pathv[glob_offset]) {
+                        if (current_files >= maximum_files) {
+                            mwarn(FILE_LIMIT);
+                            break;
+                        }
+
+                        os_realloc(log_config->globs[gl].gfiles, (n_files + glob_offset + 2)*sizeof(logreader), log_config->globs[gl].gfiles);
+                        log_config->globs[gl].gfiles[n_files + glob_offset].file = NULL;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].ffile = NULL;
+
+                         /* Check for strftime on globs too */
+                        if (strchr(g.gl_pathv[glob_offset], '%')) {
+                            struct tm *p;
+                            time_t l_time = time(0);
+                            char lfile[OS_FLSIZE + 1];
+                            size_t ret;
+
+                            p = localtime(&l_time);
+
+                            lfile[OS_FLSIZE] = '\0';
+                            ret = strftime(lfile, OS_FLSIZE, g.gl_pathv[glob_offset], p);
+                            if (ret == 0) {
+                                merror(PARSE_ERROR, g.gl_pathv[glob_offset]);
+                                return (OS_INVALID);
+                            }
+
+                            os_strdup(g.gl_pathv[glob_offset], log_config->globs[gl].gfiles[n_files + glob_offset].ffile);
+                        }
+
+                        os_strdup(g.gl_pathv[glob_offset], log_config->globs[gl].gfiles[n_files + glob_offset].file);
+                        log_config->globs[gl].gfiles[n_files + glob_offset].logformat = logf[pl].logformat;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].djb_program_name = logf[pl].djb_program_name;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].command = logf[pl].command;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].alias = logf[pl].alias;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].future = logf[pl].future;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].query = logf[pl].query;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].labels = logf[pl].labels;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].read = logf[pl].read;
+                        log_config->globs[gl].gfiles[n_files + glob_offset].fp = NULL;
+
+                        log_config->globs[gl].gfiles[n_files + glob_offset + 1].file = NULL;
+
+                        glob_offset++;
+                        current_files++;
+                    }
+                }
+            }
+
+            globfree(&g);
+            if (Remove_Localfile(&logf, pl)) {
+                merror(REM_ERROR, logf[pl].file);
                 return (OS_INVALID);
             }
+            log_config->config = logf;
+        } else if (strchr(logf[pl].file, '%'))
+#else
+        if (strchr(logf[pl].file, '%'))
+#endif /* WIN32 */
+        /* We need the format file (based on date) */
+        {
+            struct tm *p;
+            time_t l_time = time(0);
+            char lfile[OS_FLSIZE + 1];
+            size_t ret;
 
-            if (logf[i].logformat == NULL) {
-                logf[i].logformat = format;
+            p = localtime(&l_time);
+            lfile[OS_FLSIZE] = '\0';
+            ret = strftime(lfile, OS_FLSIZE, logf[pl].file, p);
+            if (ret != 0) {
+                os_strdup(logf[pl].file, logf[pl].ffile);
             }
 
+            os_strdup(logf[pl].file, logf[pl].file);
         }
     }
-
     /* Missing log format */
     if (!logf[pl].logformat) {
         merror(MISS_LOG_FORMAT);
@@ -388,8 +388,18 @@ int Read_Localfile(XML_NODE node, void *d1, __attribute__((unused)) void *d2)
 
     /* Missing file */
     if (!logf[pl].file) {
-        merror(MISS_FILE);
-        return (OS_INVALID);
+        int ex_files = 0;
+        for (i=0; log_config->globs[i].gfiles ; i++) {
+            if (log_config->globs[i].gfiles != NULL) {
+                ex_files = 1;
+                break;
+            }
+        }
+
+        if (!ex_files) {
+            merror(MISS_FILE);
+            return (OS_INVALID);
+        }
     }
 
     /* Verify a valid event log config */
@@ -452,4 +462,26 @@ void Free_Localfile(logreader_config * config){
             free(config->config);
         }
     }
+}
+
+int Remove_Localfile(logreader **logf, int i) {
+    if (*logf) {
+        int size = 0;
+        while ((*logf)[size].file) {
+            size++;
+        }
+        if (i < size) {
+            free((*logf)[i].file);
+            if (i != size -1) {
+                memcpy(&(*logf)[i], &(*logf)[size - 1], sizeof(logreader));
+            }
+            (*logf)[size - 1].file = NULL;
+            (*logf)[size - 1].command = NULL;
+            if (!size)
+                size = 1;
+            os_realloc(*logf, size*sizeof(logreader), *logf);
+            return 0;
+        }
+    }
+    return (OS_INVALID);
 }

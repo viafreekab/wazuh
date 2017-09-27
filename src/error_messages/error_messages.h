@@ -34,7 +34,7 @@
 #define FGETS_ERROR   "(1119): Invalid line on file '%s': %s."
 //#define PIPE_ERROR    "%s(1120): ERROR: Pipe error."
 #define GLOB_ERROR    "(1121): Glob error. Invalid pattern: '%s'."
-#define GLOB_NFOUND   "(1122): No file found by pattern: '%s'."
+#define GLOB_NFOUND   "(1122): No files found by pattern: '%s'."
 //#define UNLINK_ERROR  "%s(1123): ERROR: Unable to delete file: '%s'."
 #define RENAME_ERROR  "(1124): Could not rename file '%s' to '%s' due to [(%d)-(%s)]."
 //#define INT_ERROR     "%s(1125): ERROR: Internal error (undefined)."
@@ -181,6 +181,11 @@
 #define READING_EVTLOG  "(1951): Analyzing event log: '%s'."
 #define VAR_LOG_MON     "(1952): Monitoring variable log file: '%s'."
 #define INV_MULTILOG    "(1953): Invalid DJB multilog file: '%s'."
+#define REM_ERROR       "(1954): Error removing '%s' file."
+#define NEW_GLOB_FILE   "(1955): New file that matches the '%s' pattern: '%s'."
+#define DUP_FILE        "(1956): Log file '%s' is duplicated."
+#define REM_FILE        "(1957): Removing '%s'."
+#define FILE_LIMIT      "(1958): File limit has been reached."
 
 /* Encryption/auth errors */
 #define INVALID_KEY     "(1401): Error reading authentication key: '%s'."
