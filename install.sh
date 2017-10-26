@@ -828,7 +828,7 @@ main()
             if [ "X${USER_INSTALL_TYPE}" = "Xagent" ]; then
                 ct="0"
             fi
-
+            systemctl daemon-reload
         fi
         echo ""
     fi
