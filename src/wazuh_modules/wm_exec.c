@@ -173,7 +173,6 @@ static pthread_mutex_t wm_children_mutex = PTHREAD_MUTEX_INITIALIZER;   // Mutex
 
 int wm_exec(char *command, char **output, int *exitcode, int secs)
 {
-    static char* const envp[] = { NULL };
     char **argv;
     pid_t pid;
     int pipe_fd[2];
@@ -214,7 +213,7 @@ int wm_exec(char *command, char **output, int *exitcode, int secs)
         setsid();
         if (nice(wm_task_nice)) {}
 
-        if (execve(argv[0], argv, envp) < 0)
+        if (execve(argv[0], argv, environ) < 0)
             exit(EXECVE_ERROR);
 
         break;
